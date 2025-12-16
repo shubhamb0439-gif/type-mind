@@ -7,6 +7,9 @@ import { StudentDashboard } from './pages/StudentDashboard';
 function AppContent() {
   const { user, profile, hasAccess, loading } = useAuth();
 
+  const urlParams = new URLSearchParams(window.location.search);
+  const hasVSuiteToken = urlParams.has('token');
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
@@ -19,7 +22,7 @@ function AppContent() {
     return <Auth />;
   }
 
-  if (user && !hasAccess) {
+  if (user && !hasAccess && !hasVSuiteToken) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-purple-50 to-purple-100 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-xl max-w-md p-8 text-center">

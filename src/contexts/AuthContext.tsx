@@ -101,16 +101,83 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      (async () => {
-        setUser(session?.user ?? null);
-        if (session?.user) {
-          const profileData = await fetchProfile(session.user.id);
-          setProfile(profileData);
+    const initAuth = async () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const urlToken = urlParams.get('token');
+      const urlRole = urlParams.get('role');
+
+      if (urlToken) {
+        console.log('Token detected from vSuite, authenticating...');
+        try {
+          const { data: { session }, error } = await supabase.auth.setSession({
+            access_token: urlToken,
+            refresh_token: urlToken,
+          });
+
+          if (error) {
+            console.error('Error setting session from token:', error);
+          } else if (session?.user) {
+            console.log('Session established from vSuite token');
+            setUser(session.user);
+            setHasAccess(true);
+
+            let profileData = await supabase
+              .from('typemind_profiles')
+              .select('*')
+              .eq('id', session.user.id)
+              .maybeSingle();
+
+            if (!profileData.data) {
+              const roleFromUrl = urlRole === 'admin' ? 'admin' : 'student';
+              const { data: newProfile } = await supabase
+                .from('typemind_profiles')
+                .insert({
+                  id: session.user.id,
+                  email: session.user.email || '',
+                  full_name: session.user.user_metadata?.full_name || session.user.email || '',
+                  role: roleFromUrl,
+                  level: 'beginner'
+                })
+                .select()
+                .single();
+
+              setProfile(newProfile);
+            } else {
+              if (urlRole && profileData.data.role !== urlRole) {
+                const { data: updatedProfile } = await supabase
+                  .from('typemind_profiles')
+                  .update({ role: urlRole === 'admin' ? 'admin' : 'student' })
+                  .eq('id', session.user.id)
+                  .select()
+                  .single();
+                setProfile(updatedProfile);
+              } else {
+                setProfile(profileData.data);
+              }
+            }
+
+            window.history.replaceState({}, document.title, window.location.pathname);
+          }
+        } catch (err) {
+          console.error('Error during vSuite authentication:', err);
+        } finally {
+          setLoading(false);
         }
-        setLoading(false);
-      })();
-    });
+      } else {
+        supabase.auth.getSession().then(({ data: { session } }) => {
+          (async () => {
+            setUser(session?.user ?? null);
+            if (session?.user) {
+              const profileData = await fetchProfile(session.user.id);
+              setProfile(profileData);
+            }
+            setLoading(false);
+          })();
+        });
+      }
+    };
+
+    initAuth();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       (async () => {
