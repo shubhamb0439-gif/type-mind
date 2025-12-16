@@ -152,7 +152,7 @@ export const CreateClassModal: React.FC<CreateClassModalProps> = ({ onClose, onS
         console.log('Transcript length:', transcript.length);
       }
 
-      const { error } = await supabase.from('classes').insert({
+      const { error } = await supabase.from('typemind_classes').insert({
         title,
         content: transcript || content,
         level,

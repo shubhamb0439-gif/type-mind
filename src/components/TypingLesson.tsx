@@ -109,7 +109,7 @@ export const TypingLesson: React.FC<TypingLessonProps> = ({ classData, onComplet
   const checkIfFirstCompletion = async () => {
     try {
       const { data } = await supabase
-        .from('lesson_completions')
+        .from('typemind_lesson_completions')
         .select('id')
         .eq('user_id', profile?.id)
         .eq('lesson_id', classData.id)
@@ -257,7 +257,7 @@ export const TypingLesson: React.FC<TypingLessonProps> = ({ classData, onComplet
   const saveProgress = async () => {
     try {
       const { error: completionError } = await supabase
-        .from('lesson_completions')
+        .from('typemind_lesson_completions')
         .insert({
           user_id: profile?.id,
           lesson_id: classData.id,

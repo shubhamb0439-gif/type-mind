@@ -72,9 +72,9 @@ export const AdminDashboard: React.FC = () => {
     setLoading(true);
     try {
       const [usersData, rankingsData, lessonsData, statsData] = await Promise.all([
-        supabase.from('profiles').select('*').eq('role', 'student').order('created_at', { ascending: false }),
-        supabase.from('user_rankings').select('*'),
-        supabase.from('classes').select('*').order('created_at', { ascending: false }),
+        supabase.from('typemind_profiles').select('*').eq('role', 'student').order('created_at', { ascending: false }),
+        supabase.from('typemind_user_rankings').select('*'),
+        supabase.from('typemind_classes').select('*').order('created_at', { ascending: false }),
         fetchStats()
       ]);
 
@@ -99,7 +99,7 @@ export const AdminDashboard: React.FC = () => {
     try {
       // Fetch all students
       const { data: allStudents, error: studentsError } = await supabase
-        .from('profiles')
+        .from('typemind_profiles')
         .select('status')
         .eq('role', 'student');
 
@@ -112,14 +112,14 @@ export const AdminDashboard: React.FC = () => {
 
       // Fetch lesson count
       const { count: lessonCount, error: lessonsError } = await supabase
-        .from('classes')
+        .from('typemind_classes')
         .select('*', { count: 'exact', head: true });
 
       if (lessonsError) throw lessonsError;
 
       // Fetch lesson completions with stats
       const { data: completions, error: completionsError } = await supabase
-        .from('lesson_completions')
+        .from('typemind_lesson_completions')
         .select('score, wpm, accuracy');
 
       if (completionsError) throw completionsError;
@@ -164,7 +164,7 @@ export const AdminDashboard: React.FC = () => {
   const updateUserStatus = async (userId: string, status: 'approved' | 'denied') => {
     try {
       const { error } = await supabase
-        .from('profiles')
+        .from('typemind_profiles')
         .update({ status, updated_at: new Date().toISOString() })
         .eq('id', userId);
 
@@ -181,7 +181,7 @@ export const AdminDashboard: React.FC = () => {
     }
 
     try {
-      const { error } = await supabase.from('classes').delete().eq('id', lessonId);
+      const { error } = await supabase.from('typemind_classes').delete().eq('id', lessonId);
       if (error) throw error;
       fetchData();
     } catch (error) {

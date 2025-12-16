@@ -62,7 +62,7 @@ export const StudentDashboard: React.FC = () => {
 
   const fetchClasses = async () => {
     const { data } = await supabase
-      .from('classes')
+      .from('typemind_classes')
       .select('*')
       .or(`level.eq.${profile?.level},level.eq.all`)
       .order('created_at', { ascending: false });
@@ -72,7 +72,7 @@ export const StudentDashboard: React.FC = () => {
 
   const fetchRanking = async () => {
     const { data } = await supabase
-      .from('user_rankings')
+      .from('typemind_user_rankings')
       .select('*')
       .eq('user_id', profile?.id || '')
       .maybeSingle();
@@ -82,7 +82,7 @@ export const StudentDashboard: React.FC = () => {
 
   const fetchCertifications = async () => {
     const { data } = await supabase
-      .from('certifications')
+      .from('typemind_certifications')
       .select('*')
       .eq('user_id', profile?.id || '')
       .order('issued_at', { ascending: false });
@@ -92,7 +92,7 @@ export const StudentDashboard: React.FC = () => {
 
   const fetchCompletedLessons = async () => {
     const { data } = await supabase
-      .from('lesson_completions')
+      .from('typemind_lesson_completions')
       .select('lesson_id')
       .eq('user_id', profile?.id || '');
 

@@ -14,10 +14,17 @@ export interface Profile {
   email: string;
   full_name: string;
   role: 'admin' | 'student';
-  status: 'pending' | 'approved' | 'denied';
   level?: 'beginner' | 'intermediate' | 'advanced';
   created_at: string;
   updated_at: string;
+}
+
+export interface AppAccess {
+  user_id: string;
+  app_name: string;
+  role: 'student' | 'admin';
+  enabled: boolean;
+  created_at: string;
 }
 
 export interface Class {

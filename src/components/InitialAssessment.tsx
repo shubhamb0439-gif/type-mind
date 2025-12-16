@@ -81,7 +81,7 @@ export const InitialAssessment: React.FC<InitialAssessmentProps> = ({ onComplete
       }
 
       const { error: profileError } = await supabase
-        .from('profiles')
+        .from('typemind_profiles')
         .update({
           level,
           updated_at: new Date().toISOString(),

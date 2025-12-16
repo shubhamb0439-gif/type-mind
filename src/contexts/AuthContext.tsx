@@ -5,9 +5,9 @@ import { User } from '@supabase/supabase-js';
 interface AuthContextType {
   user: User | null;
   profile: Profile | null;
+  hasAccess: boolean;
   loading: boolean;
-  signUp: (email: string, password: string, fullName: string, role: 'admin' | 'student') => Promise<void>;
-  signIn: (email: string, password: string) => Promise<void>;
+  signInWithAzure: () => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -24,12 +24,38 @@ export const useAuth = () => {
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [hasAccess, setHasAccess] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  const checkAccess = async (userId: string): Promise<boolean> => {
+    const { data, error } = await supabase
+      .from('app_permissions')
+      .select('*, apps!inner(name)')
+      .eq('employee_id', userId)
+      .eq('apps.name', 'Typemind')
+      .maybeSingle();
+
+    if (error) {
+      console.error('Error checking access:', error);
+      return false;
+    }
+
+    return !!data;
+  };
 
   const fetchProfile = async (userId: string) => {
     console.log('Fetching profile for user:', userId);
+
+    const hasTypeMindAccess = await checkAccess(userId);
+    setHasAccess(hasTypeMindAccess);
+
+    if (!hasTypeMindAccess) {
+      console.log('User does not have TypeMind access');
+      return null;
+    }
+
     const { data, error } = await supabase
-      .from('profiles')
+      .from('typemind_profiles')
       .select('*')
       .eq('id', userId)
       .maybeSingle();
@@ -38,6 +64,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.error('Error fetching profile:', error);
       return null;
     }
+
+    if (!data) {
+      const { data: userData } = await supabase.auth.getUser();
+      const { data: employeeData } = await supabase
+        .from('employees')
+        .select('role')
+        .eq('id', userId)
+        .maybeSingle();
+
+      const isAdmin = employeeData?.role === 'admin' || employeeData?.role === 'super_admin';
+
+      const { data: newProfile, error: insertError } = await supabase
+        .from('typemind_profiles')
+        .insert({
+          id: userId,
+          email: userData?.user?.email || '',
+          full_name: userData?.user?.user_metadata?.full_name || userData?.user?.email || '',
+          role: isAdmin ? 'admin' : 'student',
+          level: 'beginner'
+        })
+        .select()
+        .single();
+
+      if (insertError) {
+        console.error('Error creating profile:', insertError);
+        return null;
+      }
+
+      console.log('Profile created:', newProfile);
+      return newProfile;
+    }
+
     console.log('Profile fetched:', data);
     return data;
   };
@@ -62,6 +120,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setProfile(profileData);
         } else {
           setProfile(null);
+          setHasAccess(false);
         }
       })();
     });
@@ -69,46 +128,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => subscription.unsubscribe();
   }, []);
 
-  const signUp = async (email: string, password: string, fullName: string, role: 'admin' | 'student') => {
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
+  const signInWithAzure = async () => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'azure',
       options: {
-        data: {
-          full_name: fullName,
-        }
+        scopes: 'email profile',
+        redirectTo: window.location.origin,
       }
     });
 
-    if (error) throw error;
-
-    if (data.user) {
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .insert({
-          id: data.user.id,
-          email,
-          full_name: fullName,
-          role,
-          status: role === 'admin' ? 'approved' : 'pending',
-        });
-
-      if (profileError) throw profileError;
-    }
-  };
-
-  const signIn = async (email: string, password: string) => {
-    console.log('Attempting sign in for:', email);
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
     if (error) {
-      console.error('Sign in error:', error);
+      console.error('Azure SSO error:', error);
       throw error;
     }
-    console.log('Sign in successful:', data);
   };
 
   const signOut = async () => {
@@ -121,17 +153,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       setUser(null);
       setProfile(null);
+      setHasAccess(false);
       console.log('Sign out successful');
     } catch (error) {
       console.error('Sign out error:', error);
       setUser(null);
       setProfile(null);
+      setHasAccess(false);
       throw error;
     }
   };
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signUp, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, profile, hasAccess, loading, signInWithAzure, signOut }}>
       {children}
     </AuthContext.Provider>
   );
