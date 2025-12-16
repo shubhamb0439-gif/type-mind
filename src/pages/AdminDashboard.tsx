@@ -72,7 +72,7 @@ export const AdminDashboard: React.FC = () => {
     setLoading(true);
     try {
       const [usersData, rankingsData, lessonsData, statsData] = await Promise.all([
-        supabase.from('typemind_profiles').select('*').eq('role', 'student').order('created_at', { ascending: false }),
+        supabase.from('typemind_profiles').select('*').order('created_at', { ascending: false }),
         supabase.from('typemind_user_rankings').select('*'),
         supabase.from('typemind_classes').select('*').order('created_at', { ascending: false }),
         fetchStats()
@@ -172,6 +172,36 @@ export const AdminDashboard: React.FC = () => {
       fetchData();
     } catch (error) {
       console.error('Error updating user status:', error);
+    }
+  };
+
+  const updateUserRole = async (userId: string, newRole: 'admin' | 'student') => {
+    if (!confirm(`Are you sure you want to change this user's role to ${newRole}?`)) {
+      return;
+    }
+
+    try {
+      const { error: profileError } = await supabase
+        .from('typemind_profiles')
+        .update({ role: newRole, updated_at: new Date().toISOString() })
+        .eq('id', userId);
+
+      if (profileError) throw profileError;
+
+      const { error: employeeError } = await supabase
+        .from('employees')
+        .update({ role: newRole === 'admin' ? 'admin' : 'employee' })
+        .eq('id', userId);
+
+      if (employeeError) {
+        console.warn('Could not update employees table:', employeeError);
+      }
+
+      alert(`User role updated to ${newRole} successfully!`);
+      fetchData();
+    } catch (error) {
+      console.error('Error updating user role:', error);
+      alert('Failed to update user role');
     }
   };
 
@@ -486,6 +516,7 @@ export const AdminDashboard: React.FC = () => {
                     <tr>
                       <th className="px-6 py-4 text-left text-xs font-bold text-slate-700 uppercase tracking-wider">Name</th>
                       <th className="px-6 py-4 text-left text-xs font-bold text-slate-700 uppercase tracking-wider">Email</th>
+                      <th className="px-6 py-4 text-left text-xs font-bold text-slate-700 uppercase tracking-wider">Role</th>
                       <th className="px-6 py-4 text-left text-xs font-bold text-slate-700 uppercase tracking-wider">Level</th>
                       <th className="px-6 py-4 text-left text-xs font-bold text-slate-700 uppercase tracking-wider">Rank</th>
                       <th className="px-6 py-4 text-left text-xs font-bold text-slate-700 uppercase tracking-wider">Status</th>
@@ -493,7 +524,7 @@ export const AdminDashboard: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-slate-100">
-                    {users.map((user) => (
+                    {users.filter(u => u.role === 'student').map((user) => (
                       <tr key={user.id} className="hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => setSelectedUser(user)}>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="font-semibold text-slate-900">{user.full_name}</div>
@@ -501,30 +532,47 @@ export const AdminDashboard: React.FC = () => {
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm text-slate-600">{user.email}</div>
                         </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className="px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-700 border border-blue-300">
+                            {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
+                          </span>
+                        </td>
                         <td className="px-6 py-4 whitespace-nowrap">{getLevelBadge(user.level)}</td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           {user.ranking ? getRankBadge(user.ranking.rank_grade) : <span className="text-slate-400 text-sm">No rank</span>}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">{getStatusBadge(user.status)}</td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          {user.status === 'pending' && (
-                            <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
-                              <button
-                                onClick={() => updateUserStatus(user.id, 'approved')}
-                                className="p-2 bg-emerald-100 text-emerald-700 rounded-lg hover:bg-emerald-200 transition-colors"
-                                title="Approve"
-                              >
-                                <CheckCircle className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => updateUserStatus(user.id, 'denied')}
-                                className="p-2 bg-rose-100 text-rose-700 rounded-lg hover:bg-rose-200 transition-colors"
-                                title="Deny"
-                              >
-                                <XCircle className="w-4 h-4" />
-                              </button>
-                            </div>
-                          )}
+                          <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
+                            {user.status === 'pending' && (
+                              <>
+                                <button
+                                  onClick={() => updateUserStatus(user.id, 'approved')}
+                                  className="p-2 bg-emerald-100 text-emerald-700 rounded-lg hover:bg-emerald-200 transition-colors"
+                                  title="Approve"
+                                >
+                                  <CheckCircle className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => updateUserStatus(user.id, 'denied')}
+                                  className="p-2 bg-rose-100 text-rose-700 rounded-lg hover:bg-rose-200 transition-colors"
+                                  title="Deny"
+                                >
+                                  <XCircle className="w-4 h-4" />
+                                </button>
+                              </>
+                            )}
+                            <button
+                              onClick={() => updateUserRole(user.id, 'admin')}
+                              className="px-3 py-1 text-xs font-semibold rounded-lg transition-colors text-white"
+                              style={{ backgroundColor: '#531b93' }}
+                              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#42166f'}
+                              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#531b93'}
+                              title="Promote to Admin"
+                            >
+                              Make Admin
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -628,6 +676,15 @@ export const AdminDashboard: React.FC = () => {
                     }`}>
                       {admin.status}
                     </span>
+                    {admin.id !== profile?.id && (
+                      <button
+                        onClick={() => updateUserRole(admin.id, 'student')}
+                        className="px-3 py-1 text-xs font-semibold bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors"
+                        title="Demote to Student"
+                      >
+                        Remove Admin
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}

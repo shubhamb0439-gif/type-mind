@@ -54,6 +54,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return null;
     }
 
+    try {
+      await supabase.rpc('sync_user_role_from_employees', { p_user_id: userId });
+      console.log('Role synced from employees table');
+    } catch (syncError) {
+      console.error('Error syncing role:', syncError);
+    }
+
     const { data, error } = await supabase
       .from('typemind_profiles')
       .select('*')
@@ -121,6 +128,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setUser(session.user);
             setHasAccess(true);
 
+            try {
+              await supabase.rpc('sync_user_role_from_employees', { p_user_id: session.user.id });
+              console.log('Role synced from employees table (vSuite flow)');
+            } catch (syncError) {
+              console.error('Error syncing role (vSuite flow):', syncError);
+            }
+
             let profileData = await supabase
               .from('typemind_profiles')
               .select('*')
@@ -128,14 +142,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               .maybeSingle();
 
             if (!profileData.data) {
-              const roleFromUrl = urlRole === 'admin' ? 'admin' : 'student';
+              const { data: employeeData } = await supabase
+                .from('employees')
+                .select('role')
+                .eq('id', session.user.id)
+                .maybeSingle();
+
+              const isAdmin = employeeData?.role === 'admin' || employeeData?.role === 'super_admin';
+              const roleFromEmployee = isAdmin ? 'admin' : 'student';
+
               const { data: newProfile } = await supabase
                 .from('typemind_profiles')
                 .insert({
                   id: session.user.id,
                   email: session.user.email || '',
                   full_name: session.user.user_metadata?.full_name || session.user.email || '',
-                  role: roleFromUrl,
+                  role: roleFromEmployee,
                   level: 'beginner'
                 })
                 .select()
@@ -143,17 +165,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
               setProfile(newProfile);
             } else {
-              if (urlRole && profileData.data.role !== urlRole) {
-                const { data: updatedProfile } = await supabase
-                  .from('typemind_profiles')
-                  .update({ role: urlRole === 'admin' ? 'admin' : 'student' })
-                  .eq('id', session.user.id)
-                  .select()
-                  .single();
-                setProfile(updatedProfile);
-              } else {
-                setProfile(profileData.data);
-              }
+              profileData = await supabase
+                .from('typemind_profiles')
+                .select('*')
+                .eq('id', session.user.id)
+                .maybeSingle();
+
+              setProfile(profileData.data);
             }
 
             window.history.replaceState({}, document.title, window.location.pathname);
