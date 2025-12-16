@@ -54,6 +54,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return null;
     }
 
+    const { data: appPermissionData } = await supabase
+      .from('app_permissions')
+      .select('app_role, apps!inner(name)')
+      .eq('employee_id', userId)
+      .eq('apps.name', 'Typemind')
+      .maybeSingle();
+
+    const roleFromPermissions = appPermissionData?.app_role || 'student';
+    console.log('Role from app_permissions:', roleFromPermissions);
+
     const { data, error } = await supabase
       .from('typemind_profiles')
       .select('*')
@@ -69,19 +79,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const { data: userData } = await supabase.auth.getUser();
       const { data: employeeData } = await supabase
         .from('employees')
-        .select('role')
+        .select('full_name, email')
         .eq('id', userId)
         .maybeSingle();
-
-      const isAdmin = employeeData?.role === 'admin' || employeeData?.role === 'super_admin';
 
       const { data: newProfile, error: insertError } = await supabase
         .from('typemind_profiles')
         .insert({
           id: userId,
-          email: userData?.user?.email || '',
-          full_name: userData?.user?.user_metadata?.full_name || userData?.user?.email || '',
-          role: isAdmin ? 'admin' : 'student',
+          email: employeeData?.email || userData?.user?.email || '',
+          full_name: employeeData?.full_name || userData?.user?.user_metadata?.full_name || userData?.user?.email || '',
+          role: roleFromPermissions,
           level: 'beginner'
         })
         .select()
@@ -96,6 +104,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return newProfile;
     }
 
+    if (data.role !== roleFromPermissions) {
+      console.log(`Updating role from ${data.role} to ${roleFromPermissions}`);
+      const { data: updatedProfile } = await supabase
+        .from('typemind_profiles')
+        .update({ role: roleFromPermissions })
+        .eq('id', userId)
+        .select()
+        .single();
+
+      console.log('Profile updated:', updatedProfile);
+      return updatedProfile || data;
+    }
+
     console.log('Profile fetched:', data);
     return data;
   };
@@ -104,7 +125,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const initAuth = async () => {
       const urlParams = new URLSearchParams(window.location.search);
       const urlToken = urlParams.get('token');
-      const urlRole = urlParams.get('role');
 
       if (urlToken) {
         console.log('Token detected from vSuite, authenticating...');
@@ -121,40 +141,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setUser(session.user);
             setHasAccess(true);
 
-            let profileData = await supabase
-              .from('typemind_profiles')
-              .select('*')
-              .eq('id', session.user.id)
-              .maybeSingle();
-
-            if (!profileData.data) {
-              const roleFromUrl = urlRole === 'admin' ? 'admin' : 'student';
-              const { data: newProfile } = await supabase
-                .from('typemind_profiles')
-                .insert({
-                  id: session.user.id,
-                  email: session.user.email || '',
-                  full_name: session.user.user_metadata?.full_name || session.user.email || '',
-                  role: roleFromUrl,
-                  level: 'beginner'
-                })
-                .select()
-                .single();
-
-              setProfile(newProfile);
-            } else {
-              if (urlRole && profileData.data.role !== urlRole) {
-                const { data: updatedProfile } = await supabase
-                  .from('typemind_profiles')
-                  .update({ role: urlRole === 'admin' ? 'admin' : 'student' })
-                  .eq('id', session.user.id)
-                  .select()
-                  .single();
-                setProfile(updatedProfile);
-              } else {
-                setProfile(profileData.data);
-              }
-            }
+            const profileData = await fetchProfile(session.user.id);
+            setProfile(profileData);
 
             window.history.replaceState({}, document.title, window.location.pathname);
           }
